@@ -10,7 +10,7 @@ __global__ void block_agregation_kernel(
     unsigned int *global_mem,
     unsigned int *result)
 {
-    for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1)
+    for (unsigned int s = gridDim.x / 2; s > 0; s >>= 1)
     {
         if (blockIdx.x < s)
         {
@@ -34,27 +34,24 @@ __global__ void volume_tetrahedron_on_device(
     unsigned int *global_mem)
 {
     int tid = threadIdx.x;
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int blockSize = blockDim.x;
-    int count_inside = 0;
-    extern __shared__ unsigned int s_count[];
-
+    extern __shared__ unsigned int block_count[];
     curandState state;
     curand_init(clock64(), tid, 0, &state);
     float3 P{static_cast<float>(distr_range(curand_uniform(&state), -1.5, 0.3)),
              static_cast<float>(distr_range(curand_uniform(&state), -0.2, 0.4)),
              static_cast<float>(distr_range(curand_uniform(&state), -0.7, 0.5))};
+
     if (inside_tetrahedron(A, B, C, D, P))
     {
-        atomicAdd(&global_mem[0], 1U);
+        atomicAdd(&global_mem[blockIdx.x], 1U);
     }
-
     __syncthreads();
+
     if (tid == 0 && blockIdx.x == 0)
     {
         cudaStream_t stream;
         cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
-        dim3 childGrid{BLOCK_SIZE};
+        dim3 childGrid{gridDim.x};
         dim3 childBlock{1};
         block_agregation_kernel<<<childGrid, childBlock, 0, stream>>>(global_mem, accumulator);
     }
@@ -74,14 +71,14 @@ unsigned long long device_estimate(
     cudaMemset(accumulator, 0, sizeof(unsigned int));
 
     unsigned int *global_mem;
-    cudaMalloc(&global_mem, sizeof(unsigned int)*BLOCK_SIZE);
+    cudaMallocManaged(&global_mem, sizeof(unsigned int) * grid_size);
     cudaMemset(global_mem, 0, sizeof(unsigned int));
 
     float3 *dev_vertices;
-    cudaMalloc(&dev_vertices, sizeof(float3) * 4);
+    cudaMallocManaged(&dev_vertices, sizeof(float3) * 4);
     cudaMemcpy(dev_vertices, vertices.data(), sizeof(float3) * 4, cudaMemcpyHostToDevice);
 
-    volume_tetrahedron_on_device<<<grid_size, block_size, block_size * sizeof(unsigned int)>>>(
+    volume_tetrahedron_on_device<<<grid_size, block_size, sizeof(unsigned int)>>>(
         dev_vertices[0],
         dev_vertices[1],
         dev_vertices[2],
