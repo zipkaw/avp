@@ -7,6 +7,25 @@
 constexpr unsigned int BLOCK_SIZE = 512;
 constexpr unsigned int ITER_PER_BLOCK = 100;
 
+__global__ void block_agregation_kernel(
+    unsigned int *global_mem,
+    unsigned int *result)
+{
+    for (int s = BLOCK_SIZE / 2; s > 0; s >>= 1)
+    {
+        if (blockIdx.x < s)
+        {
+            global_mem[blockIdx.x] += global_mem[blockIdx.x + s];
+        }
+        __syncthreads();
+    }
+    cudaMemcpyAsync(result,
+                    global_mem,
+                    sizeof(unsigned int),
+                    cudaMemcpyDeviceToDevice
+                    );
+}
+
 __global__ void volume_tetrahedron_on_device(
     const float3 &A,
     const float3 &B,
@@ -28,31 +47,20 @@ __global__ void volume_tetrahedron_on_device(
              static_cast<float>(distr_range(curand_uniform(&state), -0.2, 0.4)),
              static_cast<float>(distr_range(curand_uniform(&state), -0.7, 0.5))};
     if (inside_tetrahedron(A, B, C, D, P))
-        s_count[tid] = 1;
-    else
-        s_count[tid] = 0;
+    {
+        atomicAdd(&global_mem[0], 1U);
+    }
 
     __syncthreads();
-
-    for (int s = blockSize / 2; s > 0; s >>= 1)
+    if (tid == 0 && blockIdx.x == 0)
     {
-        if (tid < s)
-        {
-            s_count[tid] += s_count[tid + s];
-        }
-        __syncthreads();
+        cudaStream_t stream;
+        cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
+        dim3 childGrid{BLOCK_SIZE};
+        dim3 childBlock{1};
+        block_agregation_kernel<<<childGrid, childBlock, 0, stream>>>(global_mem, accumulator);
     }
-    // аггрегация на уровне сетки - atomicAdd
-    if (tid == 0)
-    {
-        atomicAdd(accumulator, s_count[0]);
-    }
-}
-
-__global__ void block_agregation_kernel(
-    unsigned long long *global_mem,
-    unsigned long long *result)
-{
+    __syncthreads();
 }
 
 unsigned long long device_estimate(
@@ -84,8 +92,7 @@ unsigned long long device_estimate(
         accumulator,
         global_mem);
 
-    //cudaDeviceSynchronize();
-    cudaMemcpy(&count, accumulator, sizeof(int), cudaMemcpyDeviceToHost);
+    cudaMemcpy(&count, accumulator, sizeof(unsigned int), cudaMemcpyDeviceToHost);
 
     return count;
 }
