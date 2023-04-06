@@ -4,8 +4,7 @@
 
 #define distr_range(random_fun, min, max) (random_fun * (max - (min))) + min
 
-constexpr unsigned int BLOCK_SIZE = 512;
-constexpr unsigned int ITER_PER_BLOCK = 100;
+const unsigned int BLOCK_SIZE = 512;
 
 __global__ void block_agregation_kernel(
     unsigned int *global_mem,
@@ -22,8 +21,7 @@ __global__ void block_agregation_kernel(
     cudaMemcpyAsync(result,
                     global_mem,
                     sizeof(unsigned int),
-                    cudaMemcpyDeviceToDevice
-                    );
+                    cudaMemcpyDeviceToDevice);
 }
 
 __global__ void volume_tetrahedron_on_device(
@@ -76,7 +74,7 @@ unsigned long long device_estimate(
     cudaMemset(accumulator, 0, sizeof(unsigned int));
 
     unsigned int *global_mem;
-    cudaMalloc(&global_mem, sizeof(unsigned int));
+    cudaMalloc(&global_mem, sizeof(unsigned int)*BLOCK_SIZE);
     cudaMemset(global_mem, 0, sizeof(unsigned int));
 
     float3 *dev_vertices;
