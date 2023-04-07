@@ -64,8 +64,7 @@ int main()
     float HOSTvolume = volume_tetrahedron(vertices[0], vertices[1], vertices[2], vertices[3], N);
     chrono::high_resolution_clock::time_point t2 = chrono::high_resolution_clock::now();
     chrono::duration<double> time_span = chrono::duration_cast<chrono::duration<double>>(t2 - t1);
-    std::cout << "Volume of tetrahedron: " << HOSTvolume << std::endl;
-    // std::cout << "Volume of tetrahedron: " << volume(vol, HOSTvolume, N) << std::endl;
+    std::cout << "Volume of tetrahedron: " << volume(vol, HOSTvolume, N) << std::endl;
     std::cout << "Time: " << time_span.count() << " ms" << std::endl;
 
     /*---------CUDA--------------*/
@@ -73,8 +72,7 @@ int main()
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start, 0);
-    // cout << "Volume on device: " << volume(vol, device_estimate(vertices, N), N) << endl;
-    cout << "Volume on device: " << device_estimate(vertices, N) << endl;
+    cout << "Volume on device: " << volume(vol, device_estimate(vertices, N), N) << endl;
     cudaEventRecord(stop, 0);
     cudaEventSynchronize(stop);
     float elapsedTime;

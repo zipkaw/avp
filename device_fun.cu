@@ -8,20 +8,34 @@ const unsigned int BLOCK_SIZE = 512;
 
 __global__ void block_agregation_kernel(
     unsigned int *global_mem,
-    unsigned int *result)
+    unsigned int *result,
+    unsigned int parentGridDim)
 {
-    for (unsigned int s = gridDim.x / 2; s > 0; s >>= 1)
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int tid = threadIdx.x;
+
+    extern __shared__ unsigned int temp[];
+    temp[tid] = global_mem[idx];
+    
+    __syncthreads();
+    for (unsigned int s = 1; s < blockDim.x ; s *= 2)
     {
-        if (blockIdx.x < s)
+        if (tid % (2 * s) == 0 && (tid + s) < blockDim.x )
         {
-            global_mem[blockIdx.x] += global_mem[blockIdx.x + s];
+            temp[tid] += temp[tid + s];
         }
         __syncthreads();
     }
-    cudaMemcpyAsync(result,
-                    global_mem,
-                    sizeof(unsigned int),
-                    cudaMemcpyDeviceToDevice);
+
+    if (tid == 0)
+    {
+        global_mem[0] += temp[0];
+        __syncthreads();
+        cudaMemcpyAsync(result,
+                        &global_mem[0],
+                        sizeof(unsigned int),
+                        cudaMemcpyDeviceToDevice);
+    }
 }
 
 __global__ void volume_tetrahedron_on_device(
@@ -45,15 +59,16 @@ __global__ void volume_tetrahedron_on_device(
     {
         atomicAdd(&global_mem[blockIdx.x], 1U);
     }
-    __syncthreads();
 
+    __syncthreads();
     if (tid == 0 && blockIdx.x == 0)
     {
         cudaStream_t stream;
         cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
-        dim3 childGrid{gridDim.x};
-        dim3 childBlock{1};
-        block_agregation_kernel<<<childGrid, childBlock, 0, stream>>>(global_mem, accumulator);
+        unsigned int childBlockSize = min(gridDim.x, 1024);
+        dim3 childBlock{childBlockSize};
+        dim3 childGrid{(gridDim.x + childBlockSize -1)/ childBlockSize };
+        block_agregation_kernel<<<childGrid, childBlock, gridDim.x / 2 * sizeof(unsigned int), stream>>>(global_mem, accumulator, gridDim.x);
     }
     __syncthreads();
 }
