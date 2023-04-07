@@ -1,4 +1,3 @@
-#include <iostream>
 #include <array>
 #include "vect_fun.cu"
 
@@ -16,7 +15,7 @@ __global__ void block_agregation_kernel(
 
     extern __shared__ unsigned int temp[];
     temp[tid] = global_mem[idx];
-    
+
     __syncthreads();
     for (unsigned int s = 1; s < blockDim.x ; s *= 2)
     {
